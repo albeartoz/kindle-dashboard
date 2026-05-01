@@ -169,6 +169,7 @@ class MbtaClientTests(unittest.TestCase):
             "data": {
                 "attributes": {
                     "direction_names": ["Northbound", "Southbound"],
+                    "direction_destinations": ["Alewife", "Ashmont/Braintree"],
                 }
             }
         }
@@ -217,6 +218,8 @@ class MbtaClientTests(unittest.TestCase):
         )
         self.assertEqual(payload["directions"][0]["stop_id"], "place-north")
         self.assertEqual(payload["directions"][1]["stop_id"], "place-south")
+        self.assertEqual(payload["directions"][0]["terminal"], "Alewife")
+        self.assertEqual(payload["directions"][1]["terminal"], "Ashmont/Braintree")
         self.assertEqual(payload["directions"][0]["arrivals"][0]["minutes"], 5)
         self.assertEqual(payload["directions"][1]["arrivals"][0]["minutes"], 7)
 
@@ -243,6 +246,7 @@ class MbtaClientTests(unittest.TestCase):
                     "data": {
                         "attributes": {
                             "direction_names": ["Northbound", "Southbound"],
+                            "direction_destinations": ["Alewife", "Ashmont/Braintree"],
                         }
                     }
                 },
@@ -385,10 +389,12 @@ class RenderTests(unittest.TestCase):
                 "directions": [
                     {
                         "name": "Northbound",
+                        "terminal": "Alewife",
                         "arrivals": [{"minutes": 4, "time": "9:04 AM"}],
                     },
                     {
                         "name": "Southbound",
+                        "terminal": "Ashmont/Braintree",
                         "arrivals": [{"minutes": 7, "time": "9:07 AM"}],
                     },
                 ]

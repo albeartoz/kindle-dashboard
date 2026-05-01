@@ -126,28 +126,34 @@ def _draw_mbta(
     for index, direction in enumerate(directions[:2]):
         left = x + index * (column_width + column_gap)
         box_right = left + column_width
-        draw.rectangle((left, y, box_right, y + 108), outline=MID, width=2)
+        box_bottom = y + 122
+        draw.rectangle((left, y, box_right, box_bottom), outline=MID, width=2)
         name = direction.get("name", f"Direction {direction.get('direction_id', index)}")
         for line in _wrap_text(name, fonts["small_bold"], column_width - 16, max_lines=1):
             draw.text((left + 8, y + 8), line, font=fonts["small_bold"], fill=BLACK)
+        terminal = direction.get("terminal", "")
+        if terminal:
+            terminal_text = f"to {terminal}"
+            for line in _wrap_text(terminal_text, fonts["tiny"], column_width - 16, max_lines=1):
+                draw.text((left + 8, y + 30), line, font=fonts["tiny"], fill=DARK)
         arrivals = direction.get("arrivals") or []
         if not arrivals:
-            draw.text((left + 8, y + 42), "No upcoming trains", font=fonts["small"], fill=MID)
+            draw.text((left + 8, y + 52), "No upcoming trains", font=fonts["small"], fill=MID)
         else:
             primary = arrivals[0]
-            draw.text((left + 8, y + 36), f"{primary['minutes']} min", font=fonts["large"], fill=BLACK)
-            draw.text((left + 8, y + 76), primary["time"], font=fonts["small"], fill=DARK)
+            draw.text((left + 8, y + 50), f"{primary['minutes']} min", font=fonts["large"], fill=BLACK)
+            draw.text((left + 8, y + 90), primary["time"], font=fonts["small"], fill=DARK)
             if len(arrivals) > 1:
                 second = arrivals[1]
                 _right_text(
                     draw,
                     box_right - 8,
-                    y + 78,
+                    y + 92,
                     f"next {second['minutes']}m",
                     fonts["small"],
                     DARK,
                 )
-        max_y = max(max_y, y + 108)
+        max_y = max(max_y, box_bottom)
     return max_y + 12 if directions else start_y
 
 

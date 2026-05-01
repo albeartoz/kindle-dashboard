@@ -17,7 +17,9 @@ def fetch_mbta(config: MbtaConfig, now: datetime) -> dict[str, Any]:
         raise RuntimeError("mbta.route_id and mbta.stop_ids are required")
 
     route = _get_json(f"{MBTA_BASE_URL}/routes/{config.route_id}", config.api_key)
-    direction_names = route.get("data", {}).get("attributes", {}).get("direction_names") or []
+    route_attrs = route.get("data", {}).get("attributes", {})
+    direction_names = route_attrs.get("direction_names") or []
+    direction_destinations = route_attrs.get("direction_destinations") or []
 
     predictions = _fetch_predictions(config, direction_stop_ids)
     schedules: dict[int, list[dict[str, Any]]] | None = None
@@ -43,6 +45,7 @@ def fetch_mbta(config: MbtaConfig, now: datetime) -> dict[str, Any]:
                 "direction_id": direction_id,
                 "stop_id": stop_id,
                 "name": label,
+                "terminal": _direction_value(direction_destinations, direction_id),
                 "arrivals": [_format_arrival(item, now) for item in upcoming],
             }
         )
@@ -53,6 +56,10 @@ def fetch_mbta(config: MbtaConfig, now: datetime) -> dict[str, Any]:
         "stop_ids": direction_stop_ids,
         "directions": directions,
     }
+
+
+def _direction_value(values: list[str], direction_id: int) -> str:
+    return values[direction_id] if direction_id < len(values) else ""
 
 
 def _fetch_predictions(
