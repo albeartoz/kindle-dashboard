@@ -42,6 +42,12 @@ def main() -> None:
     stops = response.json().get("data", [])
     for stop in stops[:20]:
         attrs = stop.get("attributes", {})
+        parent = (
+            stop.get("relationships", {})
+            .get("parent_station", {})
+            .get("data", {})
+            or {}
+        )
         distance = _distance_miles(
             config.home.latitude,
             config.home.longitude,
@@ -49,7 +55,13 @@ def main() -> None:
             attrs.get("longitude"),
         )
         routes = ", ".join(_routes_for_stop(stop["id"], headers)[:6])
-        print(f"{stop['id']:18} {distance:0.2f} mi  {attrs.get('name', '')}  [{routes}]")
+        platform = attrs.get("platform_name") or attrs.get("description") or ""
+        parent_label = f" parent={parent['id']}" if parent.get("id") else ""
+        platform_label = f" ({platform})" if platform else ""
+        print(
+            f"{stop['id']:18} {distance:0.2f} mi  "
+            f"{attrs.get('name', '')}{platform_label}{parent_label}  [{routes}]"
+        )
 
 
 def _routes_for_stop(stop_id: str, headers: dict[str, str]) -> list[str]:

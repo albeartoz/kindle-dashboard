@@ -49,9 +49,9 @@ def index():
 
 @app.get("/dashboard.png")
 def dashboard_png():
-    output = Path(config.dashboard.output_path)
+    output = Path(config.dashboard.output_path).resolve()
     if not output.exists():
-        render_dashboard(service.payload, config)
+        output = render_dashboard(service.payload, config).resolve()
     return send_file(output, mimetype="image/png", max_age=0)
 
 

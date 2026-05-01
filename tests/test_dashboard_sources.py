@@ -9,12 +9,54 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image
 
-from app.config import AppConfig, DashboardConfig, GoogleConfig, MbtaConfig, WeatherConfig
+from app.config import (
+    AppConfig,
+    DashboardConfig,
+    GoogleConfig,
+    MbtaConfig,
+    WeatherConfig,
+    load_config,
+)
 from app.google_client import _calendar_items, fetch_google_day
 from app.mbta import fetch_mbta
 from app.models import DashboardPayload, SourceStatus
 from app.render import render_dashboard
 from app.service import DashboardService
+
+
+class ConfigTests(unittest.TestCase):
+    def test_load_config_uses_defaults_when_file_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = load_config(Path(tmp) / "missing.yaml")
+
+        self.assertEqual(config.server.host, "0.0.0.0")
+        self.assertEqual(config.server.port, 8787)
+        self.assertEqual(config.dashboard.output_path, Path("data/dashboard.png"))
+        self.assertEqual(config.google.calendar_ids, ["primary"])
+        self.assertEqual(config.mbta.direction_ids, [0, 1])
+
+    def test_load_config_parses_mbta_stop_ids_by_direction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "mbta:",
+                        "  route_id: Red",
+                        "  stop_ids:",
+                        "    0: place-north",
+                        "    1: place-south",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            config = load_config(config_path)
+
+        self.assertEqual(config.mbta.stop_ids, {0: "place-north", 1: "place-south"})
+        self.assertEqual(
+            config.mbta.direction_stop_ids,
+            {0: "place-north", 1: "place-south"},
+        )
 
 
 class FakeRequest:
@@ -102,6 +144,63 @@ class GoogleClientTests(unittest.TestCase):
 
 
 class MbtaClientTests(unittest.TestCase):
+    def test_fetch_mbta_queries_configured_stop_id_per_direction(self) -> None:
+        now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
+        route_response = {
+            "data": {
+                "attributes": {
+                    "direction_names": ["Northbound", "Southbound"],
+                }
+            }
+        }
+        north_prediction = {
+            "data": [
+                {
+                    "attributes": {
+                        "direction_id": 0,
+                        "arrival_time": "2026-05-01T09:05:00-04:00",
+                        "departure_time": None,
+                        "status": "",
+                    }
+                }
+            ]
+        }
+        south_prediction = {
+            "data": [
+                {
+                    "attributes": {
+                        "direction_id": 1,
+                        "arrival_time": "2026-05-01T09:07:00-04:00",
+                        "departure_time": None,
+                        "status": "",
+                    }
+                }
+            ]
+        }
+        config = MbtaConfig(
+            route_id="Red",
+            stop_ids={0: "place-north", 1: "place-south"},
+        )
+
+        with patch(
+            "app.mbta._get_json",
+            side_effect=[route_response, north_prediction, south_prediction],
+        ) as get_json:
+            payload = fetch_mbta(config, now)
+
+        self.assertEqual(
+            get_json.call_args_list[1].kwargs["params"]["filter[stop]"],
+            "place-north",
+        )
+        self.assertEqual(
+            get_json.call_args_list[2].kwargs["params"]["filter[stop]"],
+            "place-south",
+        )
+        self.assertEqual(payload["directions"][0]["stop_id"], "place-north")
+        self.assertEqual(payload["directions"][1]["stop_id"], "place-south")
+        self.assertEqual(payload["directions"][0]["arrivals"][0]["minutes"], 5)
+        self.assertEqual(payload["directions"][1]["arrivals"][0]["minutes"], 7)
+
     def test_fetch_mbta_falls_back_to_schedules_per_missing_direction(self) -> None:
         now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
         future_prediction = {

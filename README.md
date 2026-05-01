@@ -14,7 +14,7 @@ A Flask backend that renders a `600x800` PNG for an 8th generation Kindle. The a
 
    - Set `home.latitude` and `home.longitude`.
    - Set a real NWS `weather.user_agent` with contact info.
-   - Enable `mbta` after choosing a `stop_id` and `route_id`.
+   - Enable `mbta` after choosing direction-specific `stop_ids` and a `route_id`.
    - Enable `google` after OAuth is configured.
 
 3. Run locally:
@@ -44,13 +44,15 @@ Set your coordinates in `config.yaml`, then run:
 uv run python scripts/discover_mbta_stop.py
 ```
 
-Pick the nearest useful station ID and route ID, then enable MBTA:
+Pick the useful platform stop IDs for each direction and the route ID, then enable MBTA:
 
 ```yaml
 mbta:
   enabled: true
-  stop_id: place-example
   route_id: Red
+  stop_ids:
+    0: place-example-north
+    1: place-example-south
   direction_ids: [0, 1]
 ```
 
@@ -98,4 +100,3 @@ The script downloads the latest PNG, clears the screen, displays it with `eips`,
 - `/debug.json`: current normalized data and source statuses.
 - `/refresh`: manual refresh via `POST`.
 - `/health`: health check.
-

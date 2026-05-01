@@ -57,6 +57,7 @@ class MbtaConfig:
     refresh_seconds: int = 45
     api_key_env: str = "MBTA_API_KEY"
     stop_id: str = ""
+    stop_ids: dict[int, str] = field(default_factory=dict)
     route_id: str = ""
     direction_ids: list[int] = field(default_factory=lambda: [0, 1])
     arrivals_per_direction: int = 2
@@ -64,6 +65,18 @@ class MbtaConfig:
     @property
     def api_key(self) -> str:
         return os.getenv(self.api_key_env, "")
+
+    @property
+    def direction_stop_ids(self) -> dict[int, str]:
+        if self.stop_ids:
+            return {
+                direction_id: self.stop_ids[direction_id]
+                for direction_id in self.direction_ids
+                if direction_id in self.stop_ids and self.stop_ids[direction_id]
+            }
+        if self.stop_id:
+            return {direction_id: self.stop_id for direction_id in self.direction_ids}
+        return {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +112,14 @@ def _string_list(value: Any, default: list[str]) -> list[str]:
     return [str(item) for item in value]
 
 
+def _int_string_dict(value: Any) -> dict[int, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {int(key): str(item) for key, item in value.items() if item is not None}
+
+
 def load_config(path: str | os.PathLike[str] | None = None) -> AppConfig:
+    defaults = AppConfig()
     config_path = Path(path or os.getenv("KINDLE_DASHBOARD_CONFIG", "config.yaml"))
     raw: dict[str, Any] = {}
     if config_path.exists():
@@ -117,44 +137,47 @@ def load_config(path: str | os.PathLike[str] | None = None) -> AppConfig:
 
     return AppConfig(
         server=ServerConfig(
-            host=str(server.get("host", ServerConfig.host)),
-            port=int(server.get("port", ServerConfig.port)),
+            host=str(server.get("host", defaults.server.host)),
+            port=int(server.get("port", defaults.server.port)),
         ),
         dashboard=DashboardConfig(
-            width=int(dashboard.get("width", DashboardConfig.width)),
-            height=int(dashboard.get("height", DashboardConfig.height)),
-            timezone=str(dashboard.get("timezone", DashboardConfig.timezone)),
-            title=str(dashboard.get("title", DashboardConfig.title)),
-            output_path=_path(dashboard.get("output_path", DashboardConfig.output_path)),
+            width=int(dashboard.get("width", defaults.dashboard.width)),
+            height=int(dashboard.get("height", defaults.dashboard.height)),
+            timezone=str(dashboard.get("timezone", defaults.dashboard.timezone)),
+            title=str(dashboard.get("title", defaults.dashboard.title)),
+            output_path=_path(dashboard.get("output_path", defaults.dashboard.output_path)),
         ),
         home=HomeConfig(
             latitude=_optional_float(home.get("latitude")),
             longitude=_optional_float(home.get("longitude")),
         ),
         weather=WeatherConfig(
-            enabled=bool(weather.get("enabled", WeatherConfig.enabled)),
-            refresh_seconds=int(weather.get("refresh_seconds", WeatherConfig.refresh_seconds)),
-            user_agent=str(weather.get("user_agent", WeatherConfig.user_agent)),
+            enabled=bool(weather.get("enabled", defaults.weather.enabled)),
+            refresh_seconds=int(weather.get("refresh_seconds", defaults.weather.refresh_seconds)),
+            user_agent=str(weather.get("user_agent", defaults.weather.user_agent)),
         ),
         google=GoogleConfig(
-            enabled=bool(google.get("enabled", GoogleConfig.enabled)),
-            refresh_seconds=int(google.get("refresh_seconds", GoogleConfig.refresh_seconds)),
+            enabled=bool(google.get("enabled", defaults.google.enabled)),
+            refresh_seconds=int(google.get("refresh_seconds", defaults.google.refresh_seconds)),
             client_secret_file=_path(
-                google.get("client_secret_file", GoogleConfig.client_secret_file)
+                google.get("client_secret_file", defaults.google.client_secret_file)
             ),
-            token_file=_path(google.get("token_file", GoogleConfig.token_file)),
-            calendar_ids=_string_list(google.get("calendar_ids"), ["primary"]),
-            task_list_ids=_string_list(google.get("task_list_ids"), []),
+            token_file=_path(google.get("token_file", defaults.google.token_file)),
+            calendar_ids=_string_list(google.get("calendar_ids"), defaults.google.calendar_ids),
+            task_list_ids=_string_list(google.get("task_list_ids"), defaults.google.task_list_ids),
         ),
         mbta=MbtaConfig(
-            enabled=bool(mbta.get("enabled", MbtaConfig.enabled)),
-            refresh_seconds=int(mbta.get("refresh_seconds", MbtaConfig.refresh_seconds)),
-            api_key_env=str(mbta.get("api_key_env", MbtaConfig.api_key_env)),
-            stop_id=str(mbta.get("stop_id", "")),
-            route_id=str(mbta.get("route_id", "")),
-            direction_ids=[int(value) for value in mbta.get("direction_ids", [0, 1])],
+            enabled=bool(mbta.get("enabled", defaults.mbta.enabled)),
+            refresh_seconds=int(mbta.get("refresh_seconds", defaults.mbta.refresh_seconds)),
+            api_key_env=str(mbta.get("api_key_env", defaults.mbta.api_key_env)),
+            stop_id=str(mbta.get("stop_id", defaults.mbta.stop_id)),
+            stop_ids=_int_string_dict(mbta.get("stop_ids", defaults.mbta.stop_ids)),
+            route_id=str(mbta.get("route_id", defaults.mbta.route_id)),
+            direction_ids=[
+                int(value) for value in mbta.get("direction_ids", defaults.mbta.direction_ids)
+            ],
             arrivals_per_direction=int(
-                mbta.get("arrivals_per_direction", MbtaConfig.arrivals_per_direction)
+                mbta.get("arrivals_per_direction", defaults.mbta.arrivals_per_direction)
             ),
         ),
     )

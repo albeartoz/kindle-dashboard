@@ -34,11 +34,12 @@ mbta:
   enabled: false
   refresh_seconds: 45
   api_key_env: MBTA_API_KEY
-  # Fill these after running scripts/discover_mbta_stop.py.
-  stop_id: ""
+  # Fill these with the direction-specific platform stop IDs.
+  stop_ids:
+    0: ""
+    1: ""
   route_id: ""
   direction_ids:
     - 0
     - 1
   arrivals_per_direction: 2
-
