@@ -75,17 +75,26 @@ def _draw_weather(
     precip = current.get("precipitation")
 
     draw.text((x, y), f"{temp} {unit}", font=fonts["large"], fill=BLACK)
+    range_text = _format_temperature_range(weather.get("daily_range") or {})
+    temp_bottom = y + 40
+    if range_text:
+        draw.text((x, y + 42), range_text, font=fonts["small_bold"], fill=DARK)
+        temp_bottom = y + 64
+
     summary_x = x + 124
+    summary_y = y
     for line in _wrap_text(forecast, fonts["body_bold"], right - summary_x, max_lines=2):
-        draw.text((summary_x, y), line, font=fonts["body_bold"], fill=BLACK)
-        y += 25
+        draw.text((summary_x, summary_y), line, font=fonts["body_bold"], fill=BLACK)
+        summary_y += 25
     details = []
     if precip is not None:
         details.append(f"Rain {precip}%")
     if wind:
         details.append(f"Wind {wind}")
     if details:
-        draw.text((summary_x, y), "  ".join(details), font=fonts["small"], fill=DARK)
+        draw.text((summary_x, summary_y), "  ".join(details), font=fonts["small"], fill=DARK)
+        summary_y += 22
+    y = max(summary_y, temp_bottom)
     alerts = weather.get("alerts") or []
     if alerts:
         y += 28
@@ -140,6 +149,15 @@ def _draw_mbta(
                 )
         max_y = max(max_y, y + 108)
     return max_y + 12 if directions else start_y
+
+
+def _format_temperature_range(range_data: dict[str, Any]) -> str:
+    high = range_data.get("high")
+    low = range_data.get("low")
+    if high is None or low is None:
+        return ""
+    unit = range_data.get("temperature_unit", "F")
+    return f"H {high} / L {low} {unit}"
 
 
 def _draw_events(

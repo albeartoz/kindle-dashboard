@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ from dateutil.parser import isoparse
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.errors import HttpError
 from googleapiclient.discovery import build
 
 from app.config import GoogleConfig
@@ -27,29 +29,32 @@ def authorize_google(config: GoogleConfig) -> None:
 def fetch_google_day(
     config: GoogleConfig, now: datetime
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    creds = _load_or_create_credentials(config, interactive=False)
-    calendar_service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-    tasks_service = build("tasks", "v1", credentials=creds, cache_discovery=False)
+    try:
+        creds = _load_or_create_credentials(config, interactive=False)
+        calendar_service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        tasks_service = build("tasks", "v1", credentials=creds, cache_discovery=False)
 
-    start = datetime.combine(now.date(), time.min, tzinfo=now.tzinfo)
-    end = start + timedelta(days=1)
-    task_due_start = datetime.combine(now.date(), time.min, tzinfo=timezone.utc)
-    task_due_end = task_due_start + timedelta(days=1)
+        start = datetime.combine(now.date(), time.min, tzinfo=now.tzinfo)
+        end = start + timedelta(days=1)
+        task_due_start = datetime.combine(now.date(), time.min, tzinfo=timezone.utc)
+        task_due_end = task_due_start + timedelta(days=1)
 
-    events: list[dict[str, Any]] = []
-    for calendar_id in config.calendar_ids:
-        for item in _calendar_items(calendar_service, calendar_id, start, end):
-            events.append(_event_to_item(item, now))
+        events: list[dict[str, Any]] = []
+        for calendar_id in config.calendar_ids:
+            for item in _calendar_items(calendar_service, calendar_id, start, end):
+                events.append(_event_to_item(item, now))
 
-    tasks: list[dict[str, Any]] = []
-    for task_list_id in _task_list_ids(tasks_service, config.task_list_ids):
-        for item in _task_items(tasks_service, task_list_id, task_due_start, task_due_end):
-            if _task_due_date(item) == now.date().isoformat():
-                tasks.append(_task_to_item(item))
+        tasks: list[dict[str, Any]] = []
+        for task_list_id in _task_list_ids(tasks_service, config.task_list_ids):
+            for item in _task_items(tasks_service, task_list_id, task_due_start, task_due_end):
+                if _task_due_date(item) == now.date().isoformat():
+                    tasks.append(_task_to_item(item))
 
-    return sorted(events, key=lambda value: value["sort_key"]), sorted(
-        tasks, key=lambda value: value.get("title", "").lower()
-    )
+        return sorted(events, key=lambda value: value["sort_key"]), sorted(
+            tasks, key=lambda value: value.get("title", "").lower()
+        )
+    except HttpError as exc:
+        raise RuntimeError(_google_api_error(exc)) from exc
 
 
 def _calendar_items(
@@ -119,7 +124,8 @@ def _load_or_create_credentials(config: GoogleConfig, interactive: bool = True) 
         if not Path(config.client_secret_file).exists():
             raise RuntimeError(f"Missing Google client secret: {config.client_secret_file}")
         flow = InstalledAppFlow.from_client_secrets_file(str(config.client_secret_file), SCOPES)
-        creds = flow.run_local_server(port=0)
+        oauth_port = int(os.getenv("GOOGLE_OAUTH_PORT", "8080"))
+        creds = flow.run_local_server(port=oauth_port)
 
     token_file.parent.mkdir(parents=True, exist_ok=True)
     token_file.write_text(creds.to_json(), encoding="utf-8")
@@ -179,3 +185,10 @@ def _task_to_item(item: dict[str, Any]) -> dict[str, Any]:
 def _task_due_date(item: dict[str, Any]) -> str:
     due = item.get("due", "")
     return due[:10] if len(due) >= 10 else ""
+
+
+def _google_api_error(exc: HttpError) -> str:
+    reason = getattr(exc, "reason", "") or "Google API request failed"
+    if "has not been used" in reason and "disabled" in reason:
+        return "Google API is disabled in this Cloud project"
+    return reason

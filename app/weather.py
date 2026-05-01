@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import requests
@@ -29,12 +29,14 @@ def fetch_weather(config: AppConfig, now: datetime) -> dict[str, Any]:
     alerts = _get_json(f"{NWS_BASE_URL}/alerts/active?point={lat:.4f},{lon:.4f}", headers)
 
     current_period = _first_current_or_future(hourly["properties"].get("periods", []), now)
-    today_periods = daily["properties"].get("periods", [])[:2]
+    daily_periods = daily["properties"].get("periods", [])
+    today_periods = daily_periods[:2]
     alert_features = alerts.get("features", [])
 
     return {
         "current": _period_summary(current_period) if current_period else {},
         "today": [_period_summary(period) for period in today_periods],
+        "daily_range": _daily_temperature_range(daily_periods, now),
         "alerts": [
             feature.get("properties", {}).get("event", "Weather alert")
             for feature in alert_features[:3]
@@ -69,3 +71,34 @@ def _period_summary(period: dict[str, Any]) -> dict[str, Any]:
         "precipitation": precipitation.get("value"),
     }
 
+
+def _daily_temperature_range(periods: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
+    today = now.date()
+    today_periods = [
+        period
+        for period in periods
+        if _period_overlaps_date(period, today, now)
+        and period.get("temperature") is not None
+    ]
+    if not today_periods:
+        return {}
+
+    daytime_temps = [
+        period["temperature"] for period in today_periods if period.get("isDaytime") is True
+    ]
+    nighttime_temps = [
+        period["temperature"] for period in today_periods if period.get("isDaytime") is False
+    ]
+    all_temps = [period["temperature"] for period in today_periods]
+    unit = today_periods[0].get("temperatureUnit", "F")
+    return {
+        "high": max(daytime_temps or all_temps),
+        "low": min(nighttime_temps or all_temps),
+        "temperature_unit": unit,
+    }
+
+
+def _period_overlaps_date(period: dict[str, Any], target_date: date, now: datetime) -> bool:
+    start = isoparse(period["startTime"]).astimezone(now.tzinfo)
+    end = isoparse(period["endTime"]).astimezone(now.tzinfo)
+    return start.date() <= target_date <= end.date()

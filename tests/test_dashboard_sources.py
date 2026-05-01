@@ -22,6 +22,7 @@ from app.mbta import fetch_mbta
 from app.models import DashboardPayload, SourceStatus
 from app.render import render_dashboard
 from app.service import DashboardService
+from app.weather import _daily_temperature_range
 
 
 class ConfigTests(unittest.TestCase):
@@ -239,6 +240,39 @@ class MbtaClientTests(unittest.TestCase):
         self.assertEqual(payload["directions"][1]["arrivals"][0]["minutes"], 10)
 
 
+class WeatherTests(unittest.TestCase):
+    def test_daily_temperature_range_uses_today_day_and_night_periods(self) -> None:
+        now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
+        periods = [
+            {
+                "startTime": "2026-05-01T06:00:00-04:00",
+                "endTime": "2026-05-01T18:00:00-04:00",
+                "isDaytime": True,
+                "temperature": 72,
+                "temperatureUnit": "F",
+            },
+            {
+                "startTime": "2026-05-01T18:00:00-04:00",
+                "endTime": "2026-05-02T06:00:00-04:00",
+                "isDaytime": False,
+                "temperature": 53,
+                "temperatureUnit": "F",
+            },
+            {
+                "startTime": "2026-05-02T06:00:00-04:00",
+                "endTime": "2026-05-02T18:00:00-04:00",
+                "isDaytime": True,
+                "temperature": 80,
+                "temperatureUnit": "F",
+            },
+        ]
+
+        self.assertEqual(
+            _daily_temperature_range(periods, now),
+            {"high": 72, "low": 53, "temperature_unit": "F"},
+        )
+
+
 class RenderTests(unittest.TestCase):
     def test_render_dashboard_writes_grayscale_png_at_configured_size(self) -> None:
         now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
@@ -254,7 +288,8 @@ class RenderTests(unittest.TestCase):
                     "wind_speed": "8 mph",
                     "wind_direction": "NW",
                     "precipitation": 10,
-                }
+                },
+                "daily_range": {"high": 72, "low": 53, "temperature_unit": "F"},
             },
             mbta={
                 "directions": [
