@@ -7,12 +7,14 @@ from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+import requests
 from PIL import Image
 
 from app.config import (
     AppConfig,
     DashboardConfig,
     GoogleConfig,
+    HomeConfig,
     MbtaConfig,
     WeatherConfig,
     load_config,
@@ -22,7 +24,7 @@ from app.mbta import fetch_mbta
 from app.models import DashboardPayload, SourceStatus
 from app.render import render_dashboard
 from app.service import DashboardService
-from app.weather import _daily_temperature_range
+from app.weather import _daily_temperature_range, _get_json, fetch_weather
 
 
 class ConfigTests(unittest.TestCase):
@@ -97,6 +99,22 @@ class FakeTasksService:
 
     def tasks(self) -> FakeListResource:
         return self._tasks
+
+
+class FakeWeatherResponse:
+    def __init__(self, payload: dict, status_code: int = 200) -> None:
+        self.payload = payload
+        self.status_code = status_code
+
+    def json(self) -> dict:
+        return self.payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code < 400:
+            return
+        error = requests.HTTPError("weather api error")
+        error.response = self
+        raise error
 
 
 class GoogleClientTests(unittest.TestCase):
@@ -241,6 +259,78 @@ class MbtaClientTests(unittest.TestCase):
 
 
 class WeatherTests(unittest.TestCase):
+    def test_get_json_retries_timeout_before_succeeding(self) -> None:
+        with (
+            patch(
+                "app.weather.requests.get",
+                side_effect=[
+                    requests.Timeout("slow"),
+                    FakeWeatherResponse({"ok": True}),
+                ],
+            ) as get,
+            patch("app.weather.time.sleep"),
+        ):
+            payload = _get_json("https://api.weather.gov/test", {}, timeout_seconds=20)
+
+        self.assertEqual(payload, {"ok": True})
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(get.call_args.kwargs["timeout"], (5, 20))
+
+    def test_fetch_weather_keeps_forecast_when_alerts_timeout(self) -> None:
+        now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
+        points = {
+            "properties": {
+                "forecastHourly": "https://api.weather.gov/hourly",
+                "forecast": "https://api.weather.gov/daily",
+            }
+        }
+        hourly = {
+            "properties": {
+                "periods": [
+                    {
+                        "startTime": "2026-05-01T09:00:00-04:00",
+                        "endTime": "2026-05-01T10:00:00-04:00",
+                        "temperature": 62,
+                        "temperatureUnit": "F",
+                        "shortForecast": "Mostly Sunny",
+                    }
+                ]
+            }
+        }
+        daily = {
+            "properties": {
+                "periods": [
+                    {
+                        "name": "Today",
+                        "startTime": "2026-05-01T06:00:00-04:00",
+                        "endTime": "2026-05-01T18:00:00-04:00",
+                        "isDaytime": True,
+                        "temperature": 72,
+                        "temperatureUnit": "F",
+                    },
+                    {
+                        "name": "Tonight",
+                        "startTime": "2026-05-01T18:00:00-04:00",
+                        "endTime": "2026-05-02T06:00:00-04:00",
+                        "isDaytime": False,
+                        "temperature": 53,
+                        "temperatureUnit": "F",
+                    },
+                ]
+            }
+        }
+        config = AppConfig(
+            home=HomeConfig(latitude=42.36, longitude=-71.06),
+            weather=WeatherConfig(request_timeout_seconds=20),
+        )
+
+        with patch("app.weather._get_json", side_effect=[points, hourly, daily, RuntimeError("slow")]):
+            payload = fetch_weather(config, now)
+
+        self.assertEqual(payload["current"]["temperature"], 62)
+        self.assertEqual(payload["daily_range"], {"high": 72, "low": 53, "temperature_unit": "F"})
+        self.assertEqual(payload["alerts"], [])
+
     def test_daily_temperature_range_uses_today_day_and_night_periods(self) -> None:
         now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
         periods = [
@@ -325,6 +415,26 @@ class RenderTests(unittest.TestCase):
 
 
 class DashboardServiceTests(unittest.TestCase):
+    def test_weather_refresh_failure_preserves_previous_weather_payload(self) -> None:
+        now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
+        previous_weather = {"current": {"temperature": 62}}
+        service = DashboardService(AppConfig(weather=WeatherConfig(enabled=True)))
+        service._payload = DashboardPayload(
+            generated_at=now,
+            weather=previous_weather,
+            statuses={"weather": SourceStatus(ok=True, updated_at=now)},
+        )
+
+        with (
+            patch("app.service.fetch_weather", side_effect=RuntimeError("Weather API timed out")),
+            patch("app.service.render_dashboard"),
+        ):
+            payload = service.refresh_all()
+
+        self.assertEqual(payload.weather, previous_weather)
+        self.assertFalse(payload.statuses["weather"].ok)
+        self.assertEqual(payload.statuses["weather"].error, "Weather API timed out")
+
     def test_refresh_due_fetches_only_due_sources(self) -> None:
         config = AppConfig(
             weather=WeatherConfig(enabled=True, refresh_seconds=100),

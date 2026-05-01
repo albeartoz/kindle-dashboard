@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import date, datetime
 from typing import Any
 
@@ -21,12 +22,13 @@ def fetch_weather(config: AppConfig, now: datetime) -> dict[str, Any]:
     }
     lat = config.home.latitude
     lon = config.home.longitude
+    timeout_seconds = config.weather.request_timeout_seconds
 
-    points = _get_json(f"{NWS_BASE_URL}/points/{lat:.4f},{lon:.4f}", headers)
+    points = _get_json(f"{NWS_BASE_URL}/points/{lat:.4f},{lon:.4f}", headers, timeout_seconds)
     properties = points["properties"]
-    hourly = _get_json(properties["forecastHourly"], headers)
-    daily = _get_json(properties["forecast"], headers)
-    alerts = _get_json(f"{NWS_BASE_URL}/alerts/active?point={lat:.4f},{lon:.4f}", headers)
+    hourly = _get_json(properties["forecastHourly"], headers, timeout_seconds)
+    daily = _get_json(properties["forecast"], headers, timeout_seconds)
+    alerts = _fetch_alerts(headers, lat, lon, timeout_seconds)
 
     current_period = _first_current_or_future(hourly["properties"].get("periods", []), now)
     daily_periods = daily["properties"].get("periods", [])
@@ -44,10 +46,50 @@ def fetch_weather(config: AppConfig, now: datetime) -> dict[str, Any]:
     }
 
 
-def _get_json(url: str, headers: dict[str, str]) -> dict[str, Any]:
-    response = requests.get(url, headers=headers, timeout=15)
-    response.raise_for_status()
-    return response.json()
+def _fetch_alerts(
+    headers: dict[str, str],
+    lat: float,
+    lon: float,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    try:
+        return _get_json(
+            f"{NWS_BASE_URL}/alerts/active?point={lat:.4f},{lon:.4f}",
+            headers,
+            timeout_seconds,
+        )
+    except RuntimeError:
+        return {"features": []}
+
+
+def _get_json(
+    url: str,
+    headers: dict[str, str],
+    timeout_seconds: float,
+    attempts: int = 3,
+) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            response = requests.get(url, headers=headers, timeout=(5, timeout_seconds))
+            if response.status_code >= 500 and attempt < attempts - 1:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            response.raise_for_status()
+            return response.json()
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
+            if attempt < attempts - 1:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+        except requests.HTTPError as exc:
+            last_error = exc
+            if exc.response is not None and exc.response.status_code >= 500 and attempt < attempts - 1:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            raise RuntimeError(f"Weather API request failed: {exc}") from exc
+
+    raise RuntimeError(f"Weather API timed out after {attempts} attempts") from last_error
 
 
 def _first_current_or_future(periods: list[dict[str, Any]], now: datetime) -> dict[str, Any] | None:

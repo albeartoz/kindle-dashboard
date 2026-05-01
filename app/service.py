@@ -75,9 +75,12 @@ class DashboardService:
         }
 
         if "weather" in sources and self.config.weather.enabled:
-            data["weather"], data["statuses"]["weather"] = self._capture(
+            weather_data, status = self._capture(
                 "weather", lambda: fetch_weather(self.config, now)
             )
+            if status.ok:
+                data["weather"] = weather_data
+            data["statuses"]["weather"] = status
         if "mbta" in sources and self.config.mbta.enabled:
             data["mbta"], data["statuses"]["mbta"] = self._capture(
                 "mbta", lambda: fetch_mbta(self.config.mbta, now)

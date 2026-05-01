@@ -39,6 +39,7 @@ class WeatherConfig:
     enabled: bool = True
     refresh_seconds: int = 1800
     user_agent: str = "kindle-dashboard/0.1"
+    request_timeout_seconds: float = 20.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,6 +156,12 @@ def load_config(path: str | os.PathLike[str] | None = None) -> AppConfig:
             enabled=bool(weather.get("enabled", defaults.weather.enabled)),
             refresh_seconds=int(weather.get("refresh_seconds", defaults.weather.refresh_seconds)),
             user_agent=str(weather.get("user_agent", defaults.weather.user_agent)),
+            request_timeout_seconds=float(
+                weather.get(
+                    "request_timeout_seconds",
+                    defaults.weather.request_timeout_seconds,
+                )
+            ),
         ),
         google=GoogleConfig(
             enabled=bool(google.get("enabled", defaults.google.enabled)),
