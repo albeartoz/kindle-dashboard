@@ -372,7 +372,10 @@ class RenderTests(unittest.TestCase):
         now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
         payload = DashboardPayload(
             generated_at=now,
-            calendar=[{"time": "9:30 AM", "title": "Standup"}],
+            calendar=[
+                {"time": "All day", "title": "Donation Pickup: City of Somerville"},
+                {"time": "4:00 PM-5:00 PM", "title": "Haircut"},
+            ],
             tasks=[{"title": "Take out recycling"}],
             weather={
                 "current": {

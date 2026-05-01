@@ -181,22 +181,31 @@ def _draw_events(
         draw.text((x, y), "No events today", font=fonts["body"], fill=MID)
         return y + 36
 
+    column_gap = 16
+    min_title_width = 260
+    max_time_width = max(96, right - x - column_gap - min_title_width)
+    time_width = min(
+        max((_text_width(draw, event.get("time", ""), fonts["small_bold"]) for event in events), default=0),
+        max_time_width,
+    )
+    text_x = x + time_width + column_gap
+
     rendered = 0
     for index, event in enumerate(events):
-        if y + 28 > bottom:
+        if y + 24 > bottom:
             remaining = len(events) - index
             draw.text((x, y), f"+ {remaining} more", font=fonts["small_bold"], fill=MID)
             return bottom
-        draw.text((x, y), event.get("time", ""), font=fonts["small_bold"], fill=BLACK)
-        text_x = x + 112
+        time_text = event.get("time", "")
         title = event.get("title", "(No title)")
-        for line in _wrap_text(title, fonts["body"], right - text_x, max_lines=2):
-            if y + 24 > bottom:
-                draw.text((text_x, y), "...", font=fonts["body"], fill=MID)
-                return bottom
-            draw.text((text_x, y), line, font=fonts["body"], fill=BLACK)
-            y += 24
-        y += 4
+        if _text_width(draw, time_text, fonts["small_bold"]) > max_time_width:
+            next_y = _draw_stacked_event(draw, time_text, title, x, y, right, fonts, bottom)
+        else:
+            next_y = _draw_column_event(draw, time_text, title, x, text_x, y, right, fonts, bottom)
+        if next_y is None:
+            draw.text((x, y), f"+ {len(events) - index} more", font=fonts["small_bold"], fill=MID)
+            return bottom
+        y = next_y
         rendered += 1
         if rendered >= 7:
             remaining = len(events) - rendered
@@ -204,6 +213,54 @@ def _draw_events(
                 draw.text((x, y), f"+ {remaining} more", font=fonts["small_bold"], fill=MID)
             break
     return y + 6
+
+
+def _draw_column_event(
+    draw: ImageDraw.ImageDraw,
+    time_text: str,
+    title: str,
+    x: int,
+    text_x: int,
+    y: int,
+    right: int,
+    fonts: dict[str, ImageFont.ImageFont],
+    bottom: int,
+) -> int | None:
+    title_lines = _wrap_text(title, fonts["body"], right - text_x, max_lines=2)
+    row_height = max(24, len(title_lines) * 24)
+    if y + row_height > bottom:
+        return None
+
+    draw.text((x, y), time_text, font=fonts["small_bold"], fill=BLACK)
+    line_y = y
+    for line in title_lines:
+        draw.text((text_x, line_y), line, font=fonts["body"], fill=BLACK)
+        line_y += 24
+    return y + row_height + 4
+
+
+def _draw_stacked_event(
+    draw: ImageDraw.ImageDraw,
+    time_text: str,
+    title: str,
+    x: int,
+    y: int,
+    right: int,
+    fonts: dict[str, ImageFont.ImageFont],
+    bottom: int,
+) -> int | None:
+    title_lines = _wrap_text(title, fonts["body"], right - x, max_lines=2)
+    row_height = 22 + len(title_lines) * 24
+    if y + row_height > bottom:
+        return None
+
+    for line in _wrap_text(time_text, fonts["small_bold"], right - x, max_lines=1):
+        draw.text((x, y), line, font=fonts["small_bold"], fill=BLACK)
+    line_y = y + 22
+    for line in title_lines:
+        draw.text((x, line_y), line, font=fonts["body"], fill=BLACK)
+        line_y += 24
+    return y + row_height + 4
 
 
 def _draw_tasks(
@@ -285,6 +342,11 @@ def _right_text(
 ) -> None:
     bbox = draw.textbbox((0, 0), text, font=font)
     draw.text((right - (bbox[2] - bbox[0]), y), text, font=font, fill=fill)
+
+
+def _text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return bbox[2] - bbox[0]
 
 
 def _wrap_text(
