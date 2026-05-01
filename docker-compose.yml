@@ -1,0 +1,15 @@
+services:
+  kindle-dashboard:
+    build: .
+    container_name: kindle-dashboard
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      TZ: America/New_York
+      MBTA_API_KEY: ${MBTA_API_KEY:-}
+      KINDLE_DASHBOARD_CONFIG: /app/config.yaml
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
+

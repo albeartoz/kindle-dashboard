@@ -1,0 +1,44 @@
+server:
+  host: 0.0.0.0
+  port: 8787
+
+dashboard:
+  width: 600
+  height: 800
+  timezone: America/New_York
+  title: Home
+  output_path: data/dashboard.png
+
+home:
+  # Replace with your apartment coordinates.
+  latitude: 42.3601
+  longitude: -71.0589
+
+weather:
+  enabled: true
+  refresh_seconds: 1800
+  # NWS asks for a descriptive User-Agent with contact info.
+  user_agent: "kindle-dashboard/0.1 (replace-with-your-email@example.com)"
+
+google:
+  enabled: false
+  refresh_seconds: 600
+  client_secret_file: data/client_secret.json
+  token_file: data/token.json
+  calendar_ids:
+    - primary
+  # Leave empty to include all task lists returned by Google Tasks.
+  task_list_ids: []
+
+mbta:
+  enabled: false
+  refresh_seconds: 45
+  api_key_env: MBTA_API_KEY
+  # Fill these after running scripts/discover_mbta_stop.py.
+  stop_id: ""
+  route_id: ""
+  direction_ids:
+    - 0
+    - 1
+  arrivals_per_direction: 2
+
