@@ -13,7 +13,7 @@ A Flask backend that renders a `600x800` PNG for an 8th generation Kindle. The a
 2. Edit `config.yaml`:
 
    - Set `home.latitude` and `home.longitude`.
-   - Set a real NWS `weather.user_agent` with contact info.
+   - Export an OpenWeather API key as `OPENWEATHER_API_KEY`.
    - Enable `mbta` after choosing direction-specific `stop_ids` and a `route_id`.
    - Enable `google` after OAuth is configured.
 
@@ -34,6 +34,14 @@ The rendered image is available at:
 
 ```text
 http://NAS_IP:8787/dashboard.png
+```
+
+## Weather Setup
+
+Create an OpenWeather API key, then export it before running locally or with Docker:
+
+```sh
+export OPENWEATHER_API_KEY=...
 ```
 
 ## MBTA Setup

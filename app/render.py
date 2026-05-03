@@ -162,8 +162,7 @@ def _format_temperature_range(range_data: dict[str, Any]) -> str:
     low = range_data.get("low")
     if high is None or low is None:
         return ""
-    unit = range_data.get("temperature_unit", "F")
-    return f"H {high} / L {low} {unit}"
+    return f"H {high} / L {low}"
 
 
 def _draw_events(

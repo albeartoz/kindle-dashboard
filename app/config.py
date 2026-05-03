@@ -38,8 +38,12 @@ class HomeConfig:
 class WeatherConfig:
     enabled: bool = True
     refresh_seconds: int = 1800
-    user_agent: str = "kindle-dashboard/0.1"
+    api_key_env: str = "OPENWEATHER_API_KEY"
     request_timeout_seconds: float = 20.0
+
+    @property
+    def api_key(self) -> str:
+        return os.getenv(self.api_key_env, "")
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,7 +159,7 @@ def load_config(path: str | os.PathLike[str] | None = None) -> AppConfig:
         weather=WeatherConfig(
             enabled=bool(weather.get("enabled", defaults.weather.enabled)),
             refresh_seconds=int(weather.get("refresh_seconds", defaults.weather.refresh_seconds)),
-            user_agent=str(weather.get("user_agent", defaults.weather.user_agent)),
+            api_key_env=str(weather.get("api_key_env", defaults.weather.api_key_env)),
             request_timeout_seconds=float(
                 weather.get(
                     "request_timeout_seconds",

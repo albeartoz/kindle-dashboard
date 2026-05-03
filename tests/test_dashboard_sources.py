@@ -24,7 +24,7 @@ from app.mbta import fetch_mbta
 from app.models import DashboardPayload, SourceStatus
 from app.render import render_dashboard
 from app.service import DashboardService
-from app.weather import _daily_temperature_range, _get_json, fetch_weather
+from app.weather import _get_json, fetch_weather
 
 
 class ConfigTests(unittest.TestCase):
@@ -60,6 +60,22 @@ class ConfigTests(unittest.TestCase):
             config.mbta.direction_stop_ids,
             {0: "place-north", 1: "place-south"},
         )
+
+    def test_load_config_parses_openweather_api_key_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "weather:",
+                        "  api_key_env: CUSTOM_OPENWEATHER_KEY",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            config = load_config(config_path)
+
+        self.assertEqual(config.weather.api_key_env, "CUSTOM_OPENWEATHER_KEY")
 
 
 class FakeRequest:
@@ -274,96 +290,50 @@ class WeatherTests(unittest.TestCase):
             ) as get,
             patch("app.weather.time.sleep"),
         ):
-            payload = _get_json("https://api.weather.gov/test", {}, timeout_seconds=20)
+            payload = _get_json(
+                "https://api.openweathermap.org/data/2.5/weather",
+                {},
+                timeout_seconds=20,
+            )
 
         self.assertEqual(payload, {"ok": True})
         self.assertEqual(get.call_count, 2)
+        self.assertEqual(get.call_args.kwargs["params"], {})
         self.assertEqual(get.call_args.kwargs["timeout"], (5, 20))
 
-    def test_fetch_weather_keeps_forecast_when_alerts_timeout(self) -> None:
+    def test_fetch_weather_maps_openweather_current_response(self) -> None:
         now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
-        points = {
-            "properties": {
-                "forecastHourly": "https://api.weather.gov/hourly",
-                "forecast": "https://api.weather.gov/daily",
-            }
-        }
-        hourly = {
-            "properties": {
-                "periods": [
-                    {
-                        "startTime": "2026-05-01T09:00:00-04:00",
-                        "endTime": "2026-05-01T10:00:00-04:00",
-                        "temperature": 62,
-                        "temperatureUnit": "F",
-                        "shortForecast": "Mostly Sunny",
-                    }
-                ]
-            }
-        }
-        daily = {
-            "properties": {
-                "periods": [
-                    {
-                        "name": "Today",
-                        "startTime": "2026-05-01T06:00:00-04:00",
-                        "endTime": "2026-05-01T18:00:00-04:00",
-                        "isDaytime": True,
-                        "temperature": 72,
-                        "temperatureUnit": "F",
-                    },
-                    {
-                        "name": "Tonight",
-                        "startTime": "2026-05-01T18:00:00-04:00",
-                        "endTime": "2026-05-02T06:00:00-04:00",
-                        "isDaytime": False,
-                        "temperature": 53,
-                        "temperatureUnit": "F",
-                    },
-                ]
-            }
+        openweather_response = {
+            "weather": [{"description": "mostly sunny"}],
+            "main": {"temp": 62.4, "temp_min": 53.1, "temp_max": 72.8},
+            "wind": {"speed": 8.5, "deg": 315},
         }
         config = AppConfig(
             home=HomeConfig(latitude=42.36, longitude=-71.06),
             weather=WeatherConfig(request_timeout_seconds=20),
         )
 
-        with patch("app.weather._get_json", side_effect=[points, hourly, daily, RuntimeError("slow")]):
+        with (
+            patch.dict("os.environ", {"OPENWEATHER_API_KEY": "secret"}),
+            patch("app.weather._get_json", return_value=openweather_response) as get_json,
+        ):
             payload = fetch_weather(config, now)
 
-        self.assertEqual(payload["current"]["temperature"], 62)
-        self.assertEqual(payload["daily_range"], {"high": 72, "low": 53, "temperature_unit": "F"})
+        self.assertEqual(payload["current"]["temperature"], 62.4)
+        self.assertEqual(payload["current"]["short_forecast"], "mostly sunny")
+        self.assertEqual(payload["current"]["wind_speed"], "8.5 mph")
+        self.assertEqual(payload["current"]["wind_direction"], "315deg")
+        self.assertEqual(payload["daily_range"], {"high": 72.8, "low": 53.1, "temperature_unit": "F"})
         self.assertEqual(payload["alerts"], [])
-
-    def test_daily_temperature_range_uses_today_day_and_night_periods(self) -> None:
-        now = datetime(2026, 5, 1, 9, tzinfo=ZoneInfo("America/New_York"))
-        periods = [
-            {
-                "startTime": "2026-05-01T06:00:00-04:00",
-                "endTime": "2026-05-01T18:00:00-04:00",
-                "isDaytime": True,
-                "temperature": 72,
-                "temperatureUnit": "F",
+        get_json.assert_called_once_with(
+            "https://api.openweathermap.org/data/2.5/weather",
+            params={
+                "lat": "42.3600",
+                "lon": "-71.0600",
+                "appid": "secret",
+                "units": "imperial",
             },
-            {
-                "startTime": "2026-05-01T18:00:00-04:00",
-                "endTime": "2026-05-02T06:00:00-04:00",
-                "isDaytime": False,
-                "temperature": 53,
-                "temperatureUnit": "F",
-            },
-            {
-                "startTime": "2026-05-02T06:00:00-04:00",
-                "endTime": "2026-05-02T18:00:00-04:00",
-                "isDaytime": True,
-                "temperature": 80,
-                "temperatureUnit": "F",
-            },
-        ]
-
-        self.assertEqual(
-            _daily_temperature_range(periods, now),
-            {"high": 72, "low": 53, "temperature_unit": "F"},
+            timeout_seconds=20,
         )
 
 

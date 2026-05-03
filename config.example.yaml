@@ -18,8 +18,7 @@ weather:
   enabled: true
   refresh_seconds: 1800
   request_timeout_seconds: 20
-  # NWS asks for a descriptive User-Agent with contact info.
-  user_agent: "kindle-dashboard/0.1 (replace-with-your-email@example.com)"
+  api_key_env: OPENWEATHER_API_KEY
 
 google:
   enabled: false
