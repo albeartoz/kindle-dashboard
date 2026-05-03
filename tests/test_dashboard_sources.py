@@ -322,7 +322,7 @@ class WeatherTests(unittest.TestCase):
         self.assertEqual(payload["current"]["temperature"], 62.4)
         self.assertEqual(payload["current"]["short_forecast"], "mostly sunny")
         self.assertEqual(payload["current"]["wind_speed"], "8.5 mph")
-        self.assertEqual(payload["current"]["wind_direction"], "315deg")
+        self.assertEqual(payload["current"]["wind_direction"], "NW")
         self.assertEqual(payload["daily_range"], {"high": 72.8, "low": 53.1, "temperature_unit": "F"})
         self.assertEqual(payload["alerts"], [])
         get_json.assert_called_once_with(
@@ -407,12 +407,14 @@ class DashboardServiceTests(unittest.TestCase):
         with (
             patch("app.service.fetch_weather", side_effect=RuntimeError("Weather API timed out")),
             patch("app.service.render_dashboard"),
+            self.assertLogs("app.service", level="ERROR") as logs,
         ):
             payload = service.refresh_all()
 
         self.assertEqual(payload.weather, previous_weather)
         self.assertFalse(payload.statuses["weather"].ok)
         self.assertEqual(payload.statuses["weather"].error, "Weather API timed out")
+        self.assertIn("weather refresh failed", logs.output[0])
 
     def test_refresh_due_fetches_only_due_sources(self) -> None:
         config = AppConfig(

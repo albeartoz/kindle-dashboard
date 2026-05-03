@@ -15,7 +15,7 @@ OPENWEATHER_UNITS = "imperial"
 def fetch_weather(config: AppConfig, _now: datetime) -> dict[str, Any]:
     if config.home.latitude is None or config.home.longitude is None:
         raise RuntimeError("home.latitude and home.longitude are required for weather")
-    if not config.weather.api_key:
+    if not config.weather.api_key_env:
         raise RuntimeError(f"{config.weather.api_key_env} is required for weather")
 
     response = _get_json(
@@ -23,7 +23,7 @@ def fetch_weather(config: AppConfig, _now: datetime) -> dict[str, Any]:
         params={
             "lat": f"{config.home.latitude:.4f}",
             "lon": f"{config.home.longitude:.4f}",
-            "appid": config.weather.api_key,
+            "appid": config.weather.api_key_env,
             "units": OPENWEATHER_UNITS,
         },
         timeout_seconds=config.weather.request_timeout_seconds,
@@ -106,4 +106,23 @@ def _wind_direction(wind: dict[str, Any]) -> str:
     degrees = wind.get("deg")
     if degrees is None:
         return ""
-    return f"{degrees}deg"
+    compass_points = [
+        "N",
+        "NNE",
+        "NE",
+        "ENE",
+        "E",
+        "ESE",
+        "SE",
+        "SSE",
+        "S",
+        "SSW",
+        "SW",
+        "WSW",
+        "W",
+        "WNW",
+        "NW",
+        "NNW",
+    ]
+    index = round(float(degrees) / 22.5) % len(compass_points)
+    return compass_points[index]

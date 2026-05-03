@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections.abc import Iterable
@@ -13,6 +14,8 @@ from app.mbta import fetch_mbta
 from app.models import DashboardPayload, SourceStatus
 from app.render import render_dashboard
 from app.weather import fetch_weather
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardService:
@@ -132,6 +135,7 @@ class DashboardService:
             value = fetcher()
             return value, SourceStatus(ok=True, updated_at=self._now())
         except Exception as exc:
+            logger.exception("%s refresh failed", name)
             return {}, SourceStatus(ok=False, updated_at=self._now(), error=str(exc))
 
     def _now(self) -> datetime:
