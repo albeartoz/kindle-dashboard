@@ -6,6 +6,10 @@ ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY pyproject.toml uv.lock* ./
@@ -17,4 +21,3 @@ COPY config.example.yaml ./config.yaml
 EXPOSE 8787
 
 CMD ["uv", "run", "gunicorn", "--bind", "0.0.0.0:8787", "--workers", "1", "--threads", "4", "app.main:app"]
-
