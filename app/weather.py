@@ -79,7 +79,7 @@ def _weather_summary(payload: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "current": {
-            "temperature": main.get("temp"),
+            "temperature": _round_number(main.get("temp")),
             "temperature_unit": "F",
             "short_forecast": description,
             "wind_speed": _wind_speed(wind),
@@ -87,19 +87,25 @@ def _weather_summary(payload: dict[str, Any]) -> dict[str, Any]:
         },
         "today": [],
         "daily_range": {
-            "high": main.get("temp_max"),
-            "low": main.get("temp_min"),
+            "high": _round_number(main.get("temp_max")),
+            "low": _round_number(main.get("temp_min")),
             "temperature_unit": "F",
         },
         "alerts": [],
     }
 
 
+def _round_number(value: Any) -> int | None:
+    if value is None:
+        return None
+    return round(float(value))
+
+
 def _wind_speed(wind: dict[str, Any]) -> str:
     speed = wind.get("speed")
     if speed is None:
         return ""
-    return f"{speed} mph"
+    return f"{_round_number(speed)} mph"
 
 
 def _wind_direction(wind: dict[str, Any]) -> str:

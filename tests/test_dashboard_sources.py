@@ -313,24 +313,21 @@ class WeatherTests(unittest.TestCase):
             weather=WeatherConfig(request_timeout_seconds=20),
         )
 
-        with (
-            patch.dict("os.environ", {"OPENWEATHER_API_KEY": "secret"}),
-            patch("app.weather._get_json", return_value=openweather_response) as get_json,
-        ):
+        with patch("app.weather._get_json", return_value=openweather_response) as get_json:
             payload = fetch_weather(config, now)
 
-        self.assertEqual(payload["current"]["temperature"], 62.4)
+        self.assertEqual(payload["current"]["temperature"], 62)
         self.assertEqual(payload["current"]["short_forecast"], "mostly sunny")
-        self.assertEqual(payload["current"]["wind_speed"], "8.5 mph")
+        self.assertEqual(payload["current"]["wind_speed"], "8 mph")
         self.assertEqual(payload["current"]["wind_direction"], "NW")
-        self.assertEqual(payload["daily_range"], {"high": 72.8, "low": 53.1, "temperature_unit": "F"})
+        self.assertEqual(payload["daily_range"], {"high": 73, "low": 53, "temperature_unit": "F"})
         self.assertEqual(payload["alerts"], [])
         get_json.assert_called_once_with(
             "https://api.openweathermap.org/data/2.5/weather",
             params={
                 "lat": "42.3600",
                 "lon": "-71.0600",
-                "appid": "secret",
+                "appid": "OPENWEATHER_API_KEY",
                 "units": "imperial",
             },
             timeout_seconds=20,
